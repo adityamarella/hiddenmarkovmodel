@@ -20,11 +20,13 @@ def create_matrix(matrix, trans):
 
 class Matrix(object):
 """
-    In addition to maintaining the state transitions as an adjacency list,\
-    this class also assigns indices to the states. The main purpose of this\
-    class though is to provide a uniform implementation agnostic interface for\
-    Transition, Emission matrices. For ex: the state transitions could be maintained\
-    in an adjacency matrix depending on whether the state transitions are sparse or dense
+In addition to maintaining the state transitions as an adjacency list,\
+this class also assigns indices to the states. The main purpose of this\
+class though is to provide a uniform implementation agnostic interface for\
+Transition, Emission matrices. For ex: the state transitions could be maintained\
+in an adjacency matrix depending on whether the state transitions are sparse or dense
+
+TODO: think about the design of this class
 """
 
     def __init__(self):
