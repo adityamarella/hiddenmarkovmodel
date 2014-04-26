@@ -1,16 +1,50 @@
 #!/usr/bin/env python
-"""
-Implementation of Foward, Backward algorithm for Hidden Markov Model evaluation and learning. 
- - alpha, beta matrices are incrementally built using dynamic programming
- - one quick way to verify the correctness of the implementation is to see\
-         if the values in alpha and beta matrics are the same.
-"""
 
 import sys, os
+import math
+from hmm import *
 
+def find_state_labels(tfile, efile):
+    labels = [[],[]]
+    files = [tfile, efile]
+    for i, file_path in enumerate(files):
+        fp = open(file_path)
+        for line in fp:
+            arr = line.strip().split(' ')
+            labels[i].append(arr[0])
+        fp.close()
 
-def create_matrix(matrix, trans):
-    fp = open(trans)
+    #check if labels are consistent
+    #first check the uniqueness and length of the arr
+    for item in labels:
+        if len(item) != len(set(item)):
+            break
+    else:
+        
+        first = labels[0]
+        ll = len(first)
+        for item in labels[1:]:
+            if ll != len([i for i, j in zip(item, first) if i == j]):
+                break
+        else:
+            return first
+
+    #None is returned when the tranisition and emission files are not consistent
+    #This should not happen; terminate if this happens
+    return None
+
+def find_outcomes(efile):
+    outcomes = set([])
+    fp = open(efile)
+    for line in fp:
+        arr = line.strip().split(' ')
+        for item in arr[1:]:
+            outcomes.add(item.split(':')[0])
+    fp.close()
+    return list(outcomes)
+
+def create_matrix(matrix, file_path):
+    fp = open(file_path)
     for line in fp:
         arr = line.strip().split(' ')
         for item in arr[1:]:
@@ -18,81 +52,52 @@ def create_matrix(matrix, trans):
             matrix.add(arr[0], k, float(v))
     fp.close()
 
-class Matrix(object):
-"""
-In addition to maintaining the state transitions as an adjacency list,\
-this class also assigns indices to the states. The main purpose of this\
-class though is to provide a uniform implementation agnostic interface for\
-Transition, Emission matrices. For ex: the state transitions could be maintained\
-in an adjacency matrix depending on whether the state transitions are sparse or dense
-
-TODO: think about the design of this class
-"""
-
-    def __init__(self):
-        self.matrix = {}
-        #maintained in the order of insertion
-        self.labels = []
-
-    def add(self, frm, to, prob):
-        self.matrix.setdefault(frm, []).append((to, prob))
-        self.labels.append(frm)
-
-    def index(self, label):
-        return self.labels.index(label)
-
-    def get(self, i, j):
-        a = self.labels[i]
-        b = self.labels[j]
-
-        arr = self.matrix[a]
-        for item in enumerate(arr):
-            if item[0] == b:
-                return item[1]
-        return 0
-
-class Forward(object):
-"""
-@input: transition, emission matrices and prior probabilities of the initial state
-@output: alpha matrix
-
-Note: The transition and emission matrices are instances of Matrix class defined above. 
-"""
-
-    def __init__(self, t, e, prior):
-        self.t = t
-        self.e = e
-        self.prior = prior
-
-    def create_alpha_matrix(self):
-        
 
 def main():
 
-    dev = sys.argv[1]
-    trans = sys.argv[2]
-    emit = sys.argv[3]
-    prior_file = sys.argv[4]
+    dev_file_path = sys.argv[1]
+    transition_file_path = sys.argv[2]
+    emission_file_path = sys.argv[3]
+    prior_file_path = sys.argv[4]
 
     #read prior probs from file
     prior = []
-    fp = open(prior_file)
+    fp = open(prior_file_path)
     for line in fp:
         a,b = line.strip().split(" ")
         prior.append((a,float(b)))
     fp.close()
 
+    #find state labels
+    state_labels = find_state_labels(transition_file_path, emission_file_path)
+    assert state_labels
+    assert [j for i,j in zip(prior, state_labels) if i[0] == j]
+    
+    #find outcomes
+    outcome_labels = find_outcomes(emission_file_path)
+
     #read emission, transition matrices from file
-    tmatrix = Matrix()
-    ematrix = Matrix()
-    create_matrix(tmatrix, trans)
-    create_matrix(ematrix, emit)
+    tmatrix = Transition(state_labels)
+    ematrix = Emission(state_labels)
+    create_matrix(tmatrix, transition_file_path)
+    create_matrix(ematrix, emission_file_path)
 
-    #Forward algorithm
-    f = Forward(tmatrix, ematrix, prior)
-    f.create_alpha_matrix()
-
-    #Backward algorithm
+    
+    fp = open(dev_file_path)
+    for line in fp: 
+        outcomes = line.strip().split(' ')
+        #Forward algorithm
+        f = Forward(tmatrix, ematrix, prior)
+        f.create_alpha_matrix(outcomes)
+        for i in xrange(len(state_labels)):
+            if i == 0:
+                sigma = f.alpha[i][len(outcomes)-1]
+            else:
+                sigma = log_sum(sigma, f.alpha[i][len(outcomes)-1])
+        
+        print sigma
+        
+    fp.close()
 
 if __name__=='__main__':
     main()
