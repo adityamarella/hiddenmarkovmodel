@@ -86,10 +86,12 @@ class Forward(object):
         for t in xrange(1, len(O)):
             for i in xrange(len(states)):
                 for j in xrange(0, len(states)):
+                    value = self.alpha[j][t-1] + math.log(self.transition.getk(j, i))
                     if j == 0:
-                        sigma = self.alpha[j][t-1] + math.log(self.transition.getk(j, i))
+                        sigma = value
                     else:
-                        sigma = log_sum(sigma, self.alpha[j][t-1] + math.log(self.transition.getk(j, i)) )
+                        sigma = log_sum(sigma, value)
+
                 self.alpha[i][t] = math.log(self.emission.getk(i, O[t])) + sigma
 
 class Backward(object):
@@ -121,9 +123,12 @@ class Backward(object):
         for t in xrange(T-1, -1, -1):
             for i in xrange(len(states)):
                 for j in xrange(0, len(states)):
+                    value = self.beta[j][t+1] +\
+                            math.log(self.transition.getk(i, j)) +\
+                            math.log(self.emission.getk(j, O[t+1]))
                     if j == 0:
-                        sigma = self.beta[j][t+1] + math.log(self.transition.getk(i, j)) + math.log(self.emission.getk(j, O[t+1]))
+                        sigma = value 
                     else:
-                        sigma = log_sum(sigma, self.beta[j][t+1] + math.log(self.transition.getk(i, j)) + math.log(self.emission.getk(j, O[t+1])) )
+                        sigma = log_sum(sigma, value)
                 self.beta[i][t] = sigma
 
