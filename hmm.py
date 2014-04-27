@@ -132,3 +132,50 @@ class Backward(object):
                         sigma = log_sum(sigma, value)
                 self.beta[i][t] = sigma
 
+class Viterbi(object):
+    """
+    @input: transition, emission matrices and prior probabilities of the initial state
+    @output: alpha matrix
+
+    Note: The transition and emission matrices are instances of Matrix class defined above. 
+    """
+
+    def __init__(self, t, e, prior):
+        self.transition = t
+        self.emission = e
+        self.prior = prior
+
+    def most_likely_transition_path(self, O):
+        """
+        """
+       
+        states = self.transition.states
+        self.VP = [[0]*len(O) for _ in states]
+        self.q = [['']*len(O) for _ in states]
+
+        #initialization
+        for i in xrange(len(states)):
+            self.VP[i][0] = math.log(self.prior[i][1]) + math.log(self.emission.getk(i, O[0]))
+            self.q[i][0] = states[i]
+
+        for t in xrange(1, len(O)):
+            for i in xrange(len(states)):
+                k = 0
+                maxvp = float("-inf")
+                for j in xrange(0, len(states)):
+                    value = self.VP[j][t-1] + math.log(self.transition.getk(j, i)) + math.log(self.emission.getk(i, O[t]))
+                    if maxvp < value:
+                        maxvp = value
+                        k = j
+                self.VP[i][t] = maxvp
+                self.q[i][t] = self.q[k][t-1] + '-' + states[i]
+        
+        k = 0
+        maxvp = float("-inf")
+        T = len(O) - 1
+        for i in xrange(len(states)):
+            if maxvp < self.VP[i][T]:
+                maxvp = self.VP[i][T]
+                k = i
+        return self.q[k][T].split("-")
+
