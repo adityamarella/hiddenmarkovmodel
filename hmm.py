@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 Implementation of Foward, Backward algorithm for Hidden Markov Model evaluation and learning. 
  - alpha, beta matrices are incrementally built using dynamic programming
@@ -200,11 +199,11 @@ class BaumWelch(object):
         prevll = float("-inf")
         for i in xrange(20):
             ll = self.avgll()
+            print ll
             if ll - prevll < 0.1:
                 break
             self.maximize()
             self.estimate()
-            print ll
             prevll = ll
 
     def avgll(self):
@@ -253,16 +252,15 @@ class BaumWelch(object):
                         
                     for j in xrange(len(states)):
                         if t!=len(O)-1:
-                            self.xi[m][i][j][t] = self.f.alpha[j][t]\
-                                    + self.b.beta[j][t]\
+                            self.xi[m][i][j][t] = self.f.alpha[i][t]\
+                                    + self.b.beta[j][t+1]\
                                     + math.log(self.transition.getk(i,j))\
                                     + math.log(self.emission.getk(j,O[t+1]))
 
                             self.xi[m][i][j][t] = self.xi[m][i][j][t] - sigma
                                  
                     self.gamma[m][i][t] = self.f.alpha[i][t] + self.b.beta[i][t]
-
-                    self.gamma[m][i][t] = math.exp(self.gamma[m][i][t] - sigma)
+                    self.gamma[m][i][t] = self.gamma[m][i][t] - sigma
 
     def estimate(self):
         states = self.transition.states
@@ -274,30 +272,33 @@ class BaumWelch(object):
                 if m == 0:
                     sigma = self.gamma[m][i][0]
                 else:
-                    sigma = sigma + self.gamma[m][i][0]
-            self.prior[i] = (states[i], math.exp(sigma - math.log(M)))
+                    sigma = log_sum(sigma, self.gamma[m][i][0])
+            self.prior[i] = (states[i], math.exp(sigma)/M)
         
         #new transition probs
         for i in xrange(N):
-            denominator = 0
             for j in xrange(N):
                 sigma = 0
                 for m in xrange(M):
                     O = self.training[m]
-                    for t in xrange(len(O)):
+                    for t in xrange(len(O)-1):
                         if sigma == 0:
                             sigma = self.xi[m][i][j][t]
                         else:
                             sigma = log_sum(sigma, self.xi[m][i][j][t])
 
-                self.transition.setk(i, j, sigma)
-                if denominator == 0:
-                    denominator = sigma
-                else:
-                    denominator = log_sum(denominator, sigma)
+                
+                denominator = 0
+                for m in xrange(M):
+                    O = self.training[m]
+                    for k in xrange(N):
+                        for t in xrange(len(O)-1):
+                            if denominator == 0:
+                                denominator = self.xi[m][i][k][t]
+                            else:
+                                denominator = log_sum(denominator, self.xi[m][i][k][t])
 
-            for j in xrange(N):
-                self.transition.setk(i,j, math.exp(self.transition.getk(i,j) - denominator))
+                self.transition.setk(i, j, math.exp(sigma - denominator))
 
         #new emission probs
         outcomes = self.emission.emission[0].keys()
@@ -319,5 +320,5 @@ class BaumWelch(object):
                         else:
                             denominator = log_sum(denominator, self.gamma[m][i][t])
 
-                self.emission.setk(i, k, math.exp(sigma - denominator))
+                self.emission.setk(i, outcomes[k], math.exp(sigma - denominator))
 
