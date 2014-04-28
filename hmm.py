@@ -34,6 +34,9 @@ class Emission(object):
 
     def getk(self, state_idx, outcome_label):
         return self.emission[state_idx][outcome_label]
+
+    def setk(self, state_idx, outcome_label, prob):
+        self.emission[state_idx][outcome_label] = prob
     
 class Transition(object):
     """
@@ -55,6 +58,9 @@ class Transition(object):
 
     def getk(self, i, j):
         return self.matrix[i][j]
+
+    def setk(self, i, j, prob):
+        self.matrix[i][j] = prob
 
 
 class Forward(object):
@@ -134,10 +140,6 @@ class Backward(object):
 
 class Viterbi(object):
     """
-    @input: transition, emission matrices and prior probabilities of the initial state
-    @output: alpha matrix
-
-    Note: The transition and emission matrices are instances of Matrix class defined above. 
     """
 
     def __init__(self, t, e, prior):
@@ -178,4 +180,144 @@ class Viterbi(object):
                 maxvp = self.VP[i][T]
                 k = i
         return self.q[k][T].split("-")
+
+class BaumWelch(object):
+    """
+    Estimation-Maximization method
+    """
+
+    def __init__(self, t, e, prior, training_sentences):
+        """
+        initialized to some random values sampled from a uniform distribution
+        """
+        self.transition = t
+        self.emission = e
+        self.prior = prior
+
+        self.training = training_sentences
+
+    def run(self):
+        prevll = float("-inf")
+        for i in xrange(20):
+            ll = self.avgll()
+            if ll - prevll < 0.1:
+                break
+            self.maximize()
+            self.estimate()
+            print ll
+            prevll = ll
+
+    def avgll(self):
+        states = self.transition.states
+        M = len(self.training)
+        s = 0
+        for m in xrange(M):
+            O = self.training[m]
+            f = Forward(self.transition, self.emission, self.prior)
+            f.create_alpha_matrix(O)
+            sigma = 0
+            for i in xrange(len(states)):
+                if i == 0:
+                    sigma = f.alpha[i][len(O)-1]
+                else:
+                    sigma = log_sum(sigma, f.alpha[i][len(O)-1])
+            s = s + sigma
+        return s/M
+
+    def maximize(self):
+
+        states = self.transition.states
+
+        self.gamma = [[] for _ in self.training]
+        self.xi = [[] for _ in self.training]
+
+        for m,O in enumerate(self.training):
+            
+            self.gamma[m] = [[0]*len(O) for _ in xrange(len(states))]
+            self.xi[m] = [ [[0]*len(O) for _ in xrange(len(states))] for _ in xrange(len(states))]
+
+            self.f = Forward(self.transition, self.emission, self.prior)
+            self.f.create_alpha_matrix(O)
+            
+            self.b = Backward(self.transition, self.emission, self.prior)
+            self.b.create_beta_matrix(O)
+            
+            for t in xrange(len(O)):
+                for i in xrange(len(states)):
+                    for j in xrange(len(states)):
+                        value = self.f.alpha[j][t] + self.b.beta[j][t]
+                        if j == 0:
+                            sigma = value 
+                        else:
+                            sigma = log_sum(sigma, value)
+                        
+                    for j in xrange(len(states)):
+                        if t!=len(O)-1:
+                            self.xi[m][i][j][t] = self.f.alpha[j][t]\
+                                    + self.b.beta[j][t]\
+                                    + math.log(self.transition.getk(i,j))\
+                                    + math.log(self.emission.getk(j,O[t+1]))
+
+                            self.xi[m][i][j][t] = self.xi[m][i][j][t] - sigma
+                                 
+                    self.gamma[m][i][t] = self.f.alpha[i][t] + self.b.beta[i][t]
+
+                    self.gamma[m][i][t] = math.exp(self.gamma[m][i][t] - sigma)
+
+    def estimate(self):
+        states = self.transition.states
+        N = len(states)
+        M = len(self.training)
+
+        for i in xrange(N):
+            for m in xrange(M):
+                if m == 0:
+                    sigma = self.gamma[m][i][0]
+                else:
+                    sigma = sigma + self.gamma[m][i][0]
+            self.prior[i] = (states[i], math.exp(sigma - math.log(M)))
+        
+        #new transition probs
+        for i in xrange(N):
+            denominator = 0
+            for j in xrange(N):
+                sigma = 0
+                for m in xrange(M):
+                    O = self.training[m]
+                    for t in xrange(len(O)):
+                        if sigma == 0:
+                            sigma = self.xi[m][i][j][t]
+                        else:
+                            sigma = log_sum(sigma, self.xi[m][i][j][t])
+
+                self.transition.setk(i, j, sigma)
+                if denominator == 0:
+                    denominator = sigma
+                else:
+                    denominator = log_sum(denominator, sigma)
+
+            for j in xrange(N):
+                self.transition.setk(i,j, math.exp(self.transition.getk(i,j) - denominator))
+
+        #new emission probs
+        outcomes = self.emission.emission[0].keys()
+        for i in xrange(N):
+            for k in xrange(len(outcomes)):
+                sigma = 0
+                denominator = 0
+                for m in xrange(M):
+                    O = self.training[m]
+                    for t in xrange(len(O)):
+                        if outcomes[k] == O[t]:
+                            if sigma == 0:
+                                sigma = self.gamma[m][i][t]
+                            else:
+                                sigma = log_sum(sigma, self.gamma[m][i][t])
+
+                        if denominator == 0:
+                            denominator = self.gamma[m][i][t]
+                        else:
+                            denominator = log_sum(denominator, self.gamma[m][i][t])
+
+                self.emission.setk(i, k, math.exp(sigma - denominator))
 
